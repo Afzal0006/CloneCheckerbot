@@ -1,62 +1,70 @@
 from pyrogram import Client, filters
 
-# ===== CONFIG =====
+# ==== CONFIG ====
 API_ID = 24597778
 API_HASH = "0b34ead62566cc7b072c0cf6b86b716e"
 BOT_TOKEN = "6470654669:AAGdIa0b0As_XmgnT0OD2yZa1Otpos2f3YM"
 
-# ===== DEAL INFO =====
-BUYER = "@buyer_username"   # <-- Replace with real username
-SELLER = "@seller_username" # <-- Replace with real username
-DEAL_AMOUNT = "10 Rs"
-TIME_LIMIT = "24 hours"     # <-- Example time
+# Global deal info (latest form ka data yahan store hoga)
+current_buyer = None
+current_seller = None
 
-# Bot client
-app = Client(
-    "escrow_bot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN
-)
+app = Client("escrow_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Send deal info when bot starts (optional, can also trigger with /deal command)
-@app.on_message(filters.command("deal") & filters.group)
-def deal_info(client, message):
-    client.send_message(
-        message.chat.id,
-        f"📜 DEAL INFO:\n\n"
-        f"🤝 BUYER: {BUYER}\n"
-        f"🤝 SELLER: {SELLER}\n"
-        f"💰 DEAL AMOUNT: {DEAL_AMOUNT}\n"
-        f"⏳ TIME TO COMPLETE DEAL: {TIME_LIMIT}\n\n"
-        f"⚠️ Only {BUYER} and {SELLER} can type 'release' or 'refund'."
-    )
 
-# Monitor messages in group
-@app.on_message(filters.group & filters.text)
-def monitor_messages(client, message):
-    text = message.text.lower()
-    sender_username = f"@{message.from_user.username}" if message.from_user.username else ""
+@app.on_message(filters.group)
+def handle_group_messages(client, message):
+    global current_buyer, current_seller
 
-    if "release" in text or "refund" in text:
-        if sender_username not in [BUYER, SELLER]:
-            try:
-                # Delete the message
-                client.delete_messages(message.chat.id, message.id)
+    if not message.text:
+        return
 
-                # Kick the interfering user
-                client.kick_chat_member(message.chat.id, message.from_user.id)
+    text = message.text.strip()
 
-                # Warn the group
-                client.send_message(
-                    message.chat.id,
-                    f"🚫 {sender_username} tried to interfere with the deal and was removed!"
-                )
-                print(f"❌ Kicked user: {sender_username}")
-            except Exception as e:
-                print(f"⚠️ Error kicking {sender_username}: {e}")
-        else:
-            print(f"✅ Allowed user {sender_username} used: {text}")
+    # 1) Agar new DEAL INFO form hai → extract buyer & seller
+    if text.startswith("DEAL INFO"):
+        lines = text.splitlines()
+        buyer_line = next((l for l in lines if l.startswith("BUYER")), "")
+        seller_line = next((l for l in lines if l.startswith("SELLER")), "")
+
+        if ":" in buyer_line:
+            current_buyer = buyer_line.split(":")[1].strip()
+        if ":" in seller_line:
+            current_seller = seller_line.split(":")[1].strip()
+
+        client.send_message(
+            message.chat.id,
+            f"✅ New Deal Set!\nBuyer: {current_buyer}\nSeller: {current_seller}"
+        )
+        return
+
+    # 2) Agar koi 'release' ya 'refund' bole
+    lowered = text.lower()
+    if "release" in lowered or "refund" in lowered:
+        sender_username = f"@{message.from_user.username}" if message.from_user.username else ""
+
+        # Check: agar wo current buyer ya seller hai → allowed
+        if sender_username in [current_buyer, current_seller]:
+            print(f"✔ Allowed: {sender_username} used {lowered}")
+            return
+
+        # Agar admin hai to skip
+        member = client.get_chat_member(message.chat.id, message.from_user.id)
+        if member.status in ["administrator", "creator"]:
+            print(f"⚠ Admin {sender_username} used keyword, skipping ban.")
+            return
+
+        # Otherwise ban user
+        try:
+            client.ban_chat_member(message.chat.id, message.from_user.id)
+            client.send_message(
+                message.chat.id,
+                f"🚫 {sender_username} tried to interfere with the deal and was banned!"
+            )
+            print(f"❌ Banned: {sender_username}")
+        except Exception as e:
+            print(f"Error banning {sender_username}: {e}")
+
 
 print("🤖 Escrow bot is running…")
 app.run()
