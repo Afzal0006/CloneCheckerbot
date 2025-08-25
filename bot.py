@@ -1,7 +1,7 @@
 from pyrogram import Client, filters
 
 # ===== CONFIG =====
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # Replace with your bot token
+BOT_TOKEN = "8350094964:AAE-ebwWQBx_YWnW_stEqcxiKKVVx8SZaAw"  # Replace with your bot token
 
 # Buyer & Seller usernames (with @)
 BUYER = "@buyer_username"
