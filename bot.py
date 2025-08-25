@@ -1,5 +1,6 @@
 from pyrogram import Client, filters
 from pymongo import MongoClient
+from datetime import datetime, timedelta
 
 # ==== CONFIG ====
 API_ID = 24597778
@@ -26,7 +27,9 @@ async def handle_group_messages(client, message):
     username = f"@{message.from_user.username}" if message.from_user.username else None
     sender_tag = f"[{message.from_user.first_name}](tg://user?id={user_id})"
 
+    # ---------------------------
     # 1) Save DEAL INFO
+    # ---------------------------
     if text.startswith("DEAL INFO"):
         lines = text.splitlines()
         buyer_line = next((l for l in lines if l.startswith("BUYER")), "")
@@ -40,7 +43,10 @@ async def handle_group_messages(client, message):
                 "chat_id": message.chat.id,
                 "buyer": buyer,
                 "seller": seller,
-                "status": "active"
+                "buyer_id": None,  # optional
+                "seller_id": None,
+                "status": "active",
+                "timestamp": datetime.utcnow()
             }
             deals_col.insert_one(deal_data)
             await client.send_message(
@@ -49,38 +55,44 @@ async def handle_group_messages(client, message):
             )
         return
 
+    # ---------------------------
     # 2) Release/Refund handling
+    # ---------------------------
     if "release" in lowered or "refund" in lowered:
-        current_deal = deals_col.find_one({"chat_id": message.chat.id}, sort=[("_id", -1)])
-        if not current_deal:
+        # Admin skip
+        member = await client.get_chat_member(message.chat.id, user_id)
+        if member.status in ["administrator", "creator"]:
+            return
+
+        # Find all active deals in this chat
+        active_deals = list(deals_col.find({"chat_id": message.chat.id, "status": "active"}))
+        if not active_deals:
             await client.send_message(
                 message.chat.id,
                 f"⚠ {sender_tag}, no active deal found! Please use the DEAL INFO form."
             )
             return
 
-        buyer = current_deal["buyer"]
-        seller = current_deal["seller"]
+        # Check if user is buyer/seller in any deal
+        allowed = False
+        for deal in active_deals:
+            if username in [deal["buyer"], deal["seller"]]:
+                allowed = True
+                await client.send_message(
+                    message.chat.id,
+                    f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {deal['buyer']} & {deal['seller']}"
+                )
+                break
 
-        # Admin skip
-        member = await client.get_chat_member(message.chat.id, user_id)
-        if member.status in ["administrator", "creator"]:
-            return
-
-        # Check if username matches buyer or seller
-        if username in [buyer, seller]:
-            await client.send_message(
-                message.chat.id,
-                f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {buyer} & {seller}"
-            )
-        else:
-            # Mute user for 1 hour (3600 seconds)
+        if not allowed:
+            # Mute interfering user for 1 hour
             try:
+                until_time = datetime.utcnow() + timedelta(hours=1)
                 await client.restrict_chat_member(
                     message.chat.id,
                     user_id,
                     permissions={"can_send_messages": False},
-                    until_date=int(message.date.timestamp()) + 3600
+                    until_date=until_time
                 )
                 await client.send_message(
                     message.chat.id,
@@ -90,5 +102,5 @@ async def handle_group_messages(client, message):
                 await client.send_message(message.chat.id, f"⚠ Error muting user: {e}")
 
 
-print("🤖 Simple Escrow bot running…")
+print("🤖 Multi-deal Escrow bot running…")
 app.run()
