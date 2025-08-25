@@ -1,5 +1,6 @@
 from pyrogram import Client, filters
 from pymongo import MongoClient
+from pyrogram.types import ChatPermissions
 from datetime import datetime, timedelta
 
 # ==== CONFIG ====
@@ -43,8 +44,6 @@ async def handle_group_messages(client, message):
                 "chat_id": message.chat.id,
                 "buyer": buyer,
                 "seller": seller,
-                "buyer_id": None,  # optional
-                "seller_id": None,
                 "status": "active",
                 "timestamp": datetime.utcnow()
             }
@@ -64,7 +63,7 @@ async def handle_group_messages(client, message):
         if member.status in ["administrator", "creator"]:
             return
 
-        # Find all active deals in this chat
+        # All active deals in this chat
         active_deals = list(deals_col.find({"chat_id": message.chat.id, "status": "active"}))
         if not active_deals:
             await client.send_message(
@@ -85,13 +84,18 @@ async def handle_group_messages(client, message):
                 break
 
         if not allowed:
-            # Mute interfering user for 1 hour
+            # Mute user for 1 hour
             try:
                 until_time = datetime.utcnow() + timedelta(hours=1)
                 await client.restrict_chat_member(
                     message.chat.id,
                     user_id,
-                    permissions={"can_send_messages": False},
+                    permissions=ChatPermissions(
+                        can_send_messages=False,
+                        can_send_media_messages=False,
+                        can_send_other_messages=False,
+                        can_add_web_page_previews=False
+                    ),
                     until_date=until_time
                 )
                 await client.send_message(
@@ -102,5 +106,5 @@ async def handle_group_messages(client, message):
                 await client.send_message(message.chat.id, f"⚠ Error muting user: {e}")
 
 
-print("🤖 Multi-deal Escrow bot running…")
+print("🤖 Multi-user & multi-deal Escrow bot running…")
 app.run()
