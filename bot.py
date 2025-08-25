@@ -1,13 +1,20 @@
 from pyrogram import Client, filters
 
 # ===== CONFIG =====
-BOT_TOKEN = "8350094964:AAE-ebwWQBx_YWnW_stEqcxiKKVVx8SZaAw"  # Replace with your bot token
+API_ID = 24597778
+API_HASH = "0b34ead62566cc7b072c0cf6b86b716e"
+BOT_TOKEN = "6470654669:AAGdIa0b0As_XmgnT0OD2yZa1Otpos2f3YM"
 
 # Buyer & Seller usernames (with @)
 BUYER = "@buyer_username"
 SELLER = "@seller_username"
 
-app = Client("escrow_bot", bot_token=BOT_TOKEN)
+app = Client(
+    "escrow_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
+)
 
 @app.on_message(filters.group)
 def monitor_messages(client, message):
