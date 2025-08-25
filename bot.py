@@ -36,7 +36,6 @@ async def handle_group_messages(client, message):
         deadline = time_line.split(":", 1)[1].strip() if ":" in time_line else None
 
         if buyer and seller:
-            # DB save
             deal_data = {
                 "chat_id": message.chat.id,
                 "buyer": buyer,
@@ -48,12 +47,11 @@ async def handle_group_messages(client, message):
             }
             deals_col.insert_one(deal_data)
 
-            # Send confirmation + instant delete
             sent_msg = await client.send_message(
                 message.chat.id,
                 f"✅ New Deal Set!\nBuyer: {buyer}\nSeller: {seller}"
             )
-            await sent_msg.delete()   # instantly delete
+            await sent_msg.delete()
 
         return
 
@@ -62,31 +60,33 @@ async def handle_group_messages(client, message):
     if "release" in lowered or "refund" in lowered:
         user_id = message.from_user.id
         sender_tag = f"[{message.from_user.first_name}](tg://user?id={user_id})"
-
-        # Latest deal nikaalo is group ka
         current_deal = deals_col.find_one({"chat_id": message.chat.id}, sort=[("_id", -1)])
 
+        # Agar koi active deal hi nahi hai
         if not current_deal:
-            await client.send_message(message.chat.id, "⚠ No active deal found in this group.")
+            await client.send_message(
+                message.chat.id,
+                "⚠ Please tag on form and write `release` or `refund`"
+            )
             return
 
         buyer = current_deal["buyer"]
         seller = current_deal["seller"]
 
-        # Allowed only if buyer/seller
-        if sender_tag in [buyer, seller] or f"@{message.from_user.username}" in [buyer, seller]:
+        # Agar buyer/seller hai
+        if f"@{message.from_user.username}" in [buyer, seller]:
             await client.send_message(
                 message.chat.id,
                 f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {buyer} & {seller}"
             )
             return
 
-        # Agar admin hai to skip ban
+        # Agar admin hai to skip
         member = await client.get_chat_member(message.chat.id, user_id)
         if member.status in ["administrator", "creator"]:
             return
 
-        # Ban user
+        # Warna 3rd person → ban
         try:
             await client.ban_chat_member(message.chat.id, user_id)
             await client.send_message(
@@ -97,5 +97,5 @@ async def handle_group_messages(client, message):
             await client.send_message(message.chat.id, f"⚠ Error banning user: {e}")
 
 
-print("🤖 Escrow bot with ban + tagging fixed is running…")
+print("🤖 Escrow bot with tagging + ban is running…")
 app.run()
