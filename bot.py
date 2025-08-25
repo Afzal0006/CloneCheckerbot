@@ -68,21 +68,22 @@ async def handle_group_messages(client, message):
         buyer = current_deal["buyer"]
         seller = current_deal["seller"]
 
-        # Check if user tagged the deal correctly
-        user_tag_in_message = any(u in text for u in [buyer, seller])
-
         # Check if user is admin → skip
         member = await client.get_chat_member(message.chat.id, user_id)
         if member.status in ["administrator", "creator"]:
             return
 
-        if user_tag_in_message:
+        # Check if message contains correct tagged username
+        tagged_users = [entity.user.username for entity in message.entities if hasattr(entity, 'user') and entity.user.username]
+        is_allowed = any(f"@{u}" in [buyer, seller] for u in tagged_users)
+
+        if is_allowed:
             await client.send_message(
                 message.chat.id,
                 f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {buyer} & {seller}"
             )
         else:
-            # Ban unknown users trying to interfere
+            # Ban user if tag missing or wrong
             try:
                 await client.ban_chat_member(message.chat.id, user_id)
                 await client.send_message(
@@ -93,5 +94,5 @@ async def handle_group_messages(client, message):
                 await client.send_message(message.chat.id, f"⚠ Error banning user: {e}")
 
 
-print("🤖 Escrow bot with strict form tagging is running…")
+print("🤖 Escrow bot with strict tagging + auto-ban is running…")
 app.run()
