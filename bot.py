@@ -24,6 +24,7 @@ async def handle_group_messages(client, message):
     lowered = text.lower()
     user_id = message.from_user.id
     sender_tag = f"[{message.from_user.first_name}](tg://user?id={user_id})"
+    username = f"@{message.from_user.username}" if message.from_user.username else None
 
     # 1) New DEAL INFO form
     if text.startswith("DEAL INFO"):
@@ -61,7 +62,7 @@ async def handle_group_messages(client, message):
         if not current_deal:
             await client.send_message(
                 message.chat.id,
-                f"⚠ {sender_tag}, please tag on the deal before using `{lowered}`"
+                f"⚠ {sender_tag}, no active deal found! Please post your message on the DEAL INFO form."
             )
             return
 
@@ -73,11 +74,8 @@ async def handle_group_messages(client, message):
         if member.status in ["administrator", "creator"]:
             return
 
-        # Check if message contains correct tagged username
-        tagged_users = [entity.user.username for entity in message.entities if hasattr(entity, 'user') and entity.user.username]
-        is_allowed = any(f"@{u}" in [buyer, seller] for u in tagged_users)
-
-        if is_allowed:
+        # Check if message contains correct buyer/seller username from the form
+        if (buyer in text or seller in text):
             await client.send_message(
                 message.chat.id,
                 f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {buyer} & {seller}"
@@ -94,5 +92,5 @@ async def handle_group_messages(client, message):
                 await client.send_message(message.chat.id, f"⚠ Error banning user: {e}")
 
 
-print("🤖 Escrow bot with strict tagging + auto-ban is running…")
+print("🤖 Escrow bot with strict form tagging + auto-ban is running…")
 app.run()
