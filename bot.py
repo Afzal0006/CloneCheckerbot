@@ -22,7 +22,7 @@ async def handle_group_messages(client, message):
 
     text = message.text.strip()
 
-    # 1) Agar new DEAL INFO form hai → extract buyer & seller
+    # 1) New DEAL INFO form
     if text.startswith("DEAL INFO"):
         lines = text.splitlines()
         buyer_line = next((l for l in lines if l.startswith("BUYER")), "")
@@ -52,50 +52,45 @@ async def handle_group_messages(client, message):
                 f"✅ New Deal Set!\nBuyer: {buyer}\nSeller: {seller}"
             )
             await sent_msg.delete()
-
         return
 
-    # 2) Agar koi 'release' ya 'refund' bole
+    # 2) Someone types 'release' or 'refund'
     lowered = text.lower()
     if "release" in lowered or "refund" in lowered:
         user_id = message.from_user.id
         sender_tag = f"[{message.from_user.first_name}](tg://user?id={user_id})"
-        current_deal = deals_col.find_one({"chat_id": message.chat.id}, sort=[("_id", -1)])
 
-        # Agar koi active deal hi nahi hai
+        current_deal = deals_col.find_one({"chat_id": message.chat.id}, sort=[("_id", -1)])
         if not current_deal:
             await client.send_message(
                 message.chat.id,
-                "⚠ Please tag on form and write `release` or `refund`"
+                f"⚠ {sender_tag}, please tag on form before typing `{lowered}`"
             )
             return
 
         buyer = current_deal["buyer"]
         seller = current_deal["seller"]
 
-        # Agar buyer/seller hai
-        if f"@{message.from_user.username}" in [buyer, seller]:
+        # Check if user is buyer or seller
+        username = f"@{message.from_user.username}" if message.from_user.username else None
+        if username in [buyer, seller]:
             await client.send_message(
                 message.chat.id,
                 f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {buyer} & {seller}"
             )
             return
 
-        # Agar admin hai to skip
+        # Check if admin → do nothing
         member = await client.get_chat_member(message.chat.id, user_id)
         if member.status in ["administrator", "creator"]:
             return
 
-        # Warna 3rd person → ban
-        try:
-            await client.ban_chat_member(message.chat.id, user_id)
-            await client.send_message(
-                message.chat.id,
-                f"🚫 {sender_tag} tried to interfere with the deal and was banned!"
-            )
-        except Exception as e:
-            await client.send_message(message.chat.id, f"⚠ Error banning user: {e}")
+        # Otherwise, warn to tag on form first
+        await client.send_message(
+            message.chat.id,
+            f"⚠ {sender_tag}, please tag on the form before using `{lowered}`"
+        )
 
 
-print("🤖 Escrow bot with tagging + ban is running…")
+print("🤖 Escrow bot with tag checking is running…")
 app.run()
