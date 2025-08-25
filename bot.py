@@ -34,21 +34,36 @@ async def handle_group_messages(client, message):
         buyer_line = next((l for l in lines if l.startswith("BUYER")), "")
         seller_line = next((l for l in lines if l.startswith("SELLER")), "")
 
-        buyer = buyer_line.split(":", 1)[1].strip() if ":" in buyer_line else None
-        seller = seller_line.split(":", 1)[1].strip() if ":" in seller_line else None
+        buyer_username = buyer_line.split(":", 1)[1].strip() if ":" in buyer_line else None
+        seller_username = seller_line.split(":", 1)[1].strip() if ":" in seller_line else None
 
-        if buyer and seller:
+        if buyer_username and seller_username:
+            # Save Telegram IDs as well if available
+            buyer_id = None
+            seller_id = None
+
+            if message.entities:
+                for entity in message.entities:
+                    if entity.type == "mention":
+                        mention_text = message.text[entity.offset:entity.offset + entity.length]
+                        if mention_text == buyer_username:
+                            buyer_id = entity.user.id if hasattr(entity, 'user') else None
+                        if mention_text == seller_username:
+                            seller_id = entity.user.id if hasattr(entity, 'user') else None
+
             deal_data = {
                 "chat_id": message.chat.id,
-                "buyer": buyer,
-                "seller": seller,
+                "buyer": buyer_username,
+                "seller": seller_username,
+                "buyer_id": buyer_id,
+                "seller_id": seller_id,
                 "status": "active",
                 "timestamp": datetime.utcnow()
             }
             deals_col.insert_one(deal_data)
             await client.send_message(
                 message.chat.id,
-                f"✅ New Deal Set!\nBuyer: {buyer}\nSeller: {seller}"
+                f"✅ New Deal Set!\nBuyer: {buyer_username}\nSeller: {seller_username}"
             )
         return
 
@@ -72,8 +87,8 @@ async def handle_group_messages(client, message):
 
         allowed = False
         for deal in active_deals:
-            # Check if message text contains buyer or seller from the deal (plain text match)
-            if deal["buyer"].lower() in lowered or deal["seller"].lower() in lowered:
+            # Allow if sender ID matches buyer_id or seller_id
+            if user_id == deal.get("buyer_id") or user_id == deal.get("seller_id"):
                 allowed = True
                 await client.send_message(
                     message.chat.id,
@@ -84,7 +99,7 @@ async def handle_group_messages(client, message):
         if not allowed:
             await client.send_message(
                 message.chat.id,
-                f"⚠ {sender_tag}, please tag the buyer or seller from the deal!"
+                f"⚠ {sender_tag}, only the buyer or seller of this deal can use release/refund!"
             )
 
 
