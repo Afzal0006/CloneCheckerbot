@@ -1,7 +1,6 @@
 from pyrogram import Client, filters
 from pymongo import MongoClient
-from pyrogram.types import ChatPermissions
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # ==== CONFIG ====
 API_ID = 24597778
@@ -71,27 +70,16 @@ async def handle_group_messages(client, message):
             )
             return
 
-        # Check if message has a proper mention
-        if not message.entities:
-            await client.send_message(
-                message.chat.id,
-                f"⚠ {sender_tag}, please tag the buyer or seller from the deal!"
-            )
-            return
-
         allowed = False
         for deal in active_deals:
-            for entity in message.entities:
-                if entity.type == "mention":
-                    tag_text = message.text[entity.offset:entity.offset + entity.length]
-                    if tag_text in [deal["buyer"], deal["seller"]]:
-                        allowed = True
-                        await client.send_message(
-                            message.chat.id,
-                            f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {deal['buyer']} & {deal['seller']}"
-                        )
-                        break
-            if allowed:
+            # Only allow if user is buyer or seller AND text contains their username
+            if (deal["buyer"] in text and deal["buyer"].lstrip("@") == message.from_user.username) \
+            or (deal["seller"] in text and deal["seller"].lstrip("@") == message.from_user.username):
+                allowed = True
+                await client.send_message(
+                    message.chat.id,
+                    f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {deal['buyer']} & {deal['seller']}"
+                )
                 break
 
         if not allowed:
@@ -99,19 +87,7 @@ async def handle_group_messages(client, message):
                 message.chat.id,
                 f"⚠ {sender_tag}, please tag the buyer or seller from the deal!"
             )
-            # Optionally, mute user if you want:
-            # until_time = datetime.utcnow() + timedelta(hours=1)
-            # await client.restrict_chat_member(
-            #     message.chat.id,
-            #     user_id,
-            #     permissions=ChatPermissions(
-            #         can_send_messages=False,
-            #         can_send_media_messages=False,
-            #         can_send_other_messages=False,
-            #         can_add_web_page_previews=False
-            #     ),
-            #     until_date=until_time
-            # )
+
 
 print("🤖 Multi-user & multi-deal Escrow bot running…")
 app.run()
