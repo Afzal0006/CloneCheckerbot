@@ -25,7 +25,6 @@ async def handle_group_messages(client, message):
     text = message.text.strip()
     lowered = text.lower()
     user_id = message.from_user.id
-    username = f"@{message.from_user.username}" if message.from_user.username else None
     sender_tag = f"[{message.from_user.first_name}](tg://user?id={user_id})"
 
     # ---------------------------
@@ -63,7 +62,7 @@ async def handle_group_messages(client, message):
         if member.status in ["administrator", "creator"]:
             return
 
-        # All active deals in this chat
+        # Check active deals
         active_deals = list(deals_col.find({"chat_id": message.chat.id, "status": "active"}))
         if not active_deals:
             await client.send_message(
@@ -72,39 +71,47 @@ async def handle_group_messages(client, message):
             )
             return
 
-        # Check if user is buyer/seller in any deal
+        # Check if message has a proper mention
+        if not message.entities:
+            await client.send_message(
+                message.chat.id,
+                f"⚠ {sender_tag}, please tag the buyer or seller from the deal!"
+            )
+            return
+
         allowed = False
         for deal in active_deals:
-            if username in [deal["buyer"], deal["seller"]]:
-                allowed = True
-                await client.send_message(
-                    message.chat.id,
-                    f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {deal['buyer']} & {deal['seller']}"
-                )
+            for entity in message.entities:
+                if entity.type == "mention":
+                    tag_text = message.text[entity.offset:entity.offset + entity.length]
+                    if tag_text in [deal["buyer"], deal["seller"]]:
+                        allowed = True
+                        await client.send_message(
+                            message.chat.id,
+                            f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {deal['buyer']} & {deal['seller']}"
+                        )
+                        break
+            if allowed:
                 break
 
         if not allowed:
-            # Mute user for 1 hour
-            try:
-                until_time = datetime.utcnow() + timedelta(hours=1)
-                await client.restrict_chat_member(
-                    message.chat.id,
-                    user_id,
-                    permissions=ChatPermissions(
-                        can_send_messages=False,
-                        can_send_media_messages=False,
-                        can_send_other_messages=False,
-                        can_add_web_page_previews=False
-                    ),
-                    until_date=until_time
-                )
-                await client.send_message(
-                    message.chat.id,
-                    f"🚫 {sender_tag} tried to interfere with the deal and has been muted for 1 hour!"
-                )
-            except Exception as e:
-                await client.send_message(message.chat.id, f"⚠ Error muting user: {e}")
-
+            await client.send_message(
+                message.chat.id,
+                f"⚠ {sender_tag}, please tag the buyer or seller from the deal!"
+            )
+            # Optionally, mute user if you want:
+            # until_time = datetime.utcnow() + timedelta(hours=1)
+            # await client.restrict_chat_member(
+            #     message.chat.id,
+            #     user_id,
+            #     permissions=ChatPermissions(
+            #         can_send_messages=False,
+            #         can_send_media_messages=False,
+            #         can_send_other_messages=False,
+            #         can_add_web_page_previews=False
+            #     ),
+            #     until_date=until_time
+            # )
 
 print("🤖 Multi-user & multi-deal Escrow bot running…")
 app.run()
