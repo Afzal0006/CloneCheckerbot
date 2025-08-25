@@ -72,9 +72,8 @@ async def handle_group_messages(client, message):
 
         allowed = False
         for deal in active_deals:
-            # Only allow if user is buyer or seller AND text contains their username
-            if (deal["buyer"] in text and deal["buyer"].lstrip("@") == message.from_user.username) \
-            or (deal["seller"] in text and deal["seller"].lstrip("@") == message.from_user.username):
+            # Check if message text contains buyer or seller from the deal (plain text match)
+            if deal["buyer"].lower() in lowered or deal["seller"].lower() in lowered:
                 allowed = True
                 await client.send_message(
                     message.chat.id,
