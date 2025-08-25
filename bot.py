@@ -1,6 +1,5 @@
 from pyrogram import Client, filters
 from pymongo import MongoClient
-import asyncio
 
 # ==== CONFIG ====
 API_ID = 24597778
@@ -10,8 +9,8 @@ BOT_TOKEN = "6470654669:AAGdIa0b0As_XmgnT0OD2yZa1Otpos2f3YM"
 # ==== MongoDB Atlas ====
 MONGO_URI = "mongodb+srv://afzal99550:afzal99550@cluster0.aqmbh9q.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 mongo_client = MongoClient(MONGO_URI)
-db = mongo_client["escrow_db"]     # Database ka naam
-deals_col = db["deals"]            # Collection ka naam
+db = mongo_client["escrow_db"]
+deals_col = db["deals"]
 
 app = Client("escrow_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -61,7 +60,8 @@ async def handle_group_messages(client, message):
     # 2) Agar koi 'release' ya 'refund' bole
     lowered = text.lower()
     if "release" in lowered or "refund" in lowered:
-        sender_username = f"@{message.from_user.username}" if message.from_user.username else ""
+        user_id = message.from_user.id
+        sender_tag = f"[{message.from_user.first_name}](tg://user?id={user_id})"
 
         # Latest deal nikaalo is group ka
         current_deal = deals_col.find_one({"chat_id": message.chat.id}, sort=[("_id", -1)])
@@ -73,26 +73,29 @@ async def handle_group_messages(client, message):
         buyer = current_deal["buyer"]
         seller = current_deal["seller"]
 
-        # Check: agar wo current buyer ya seller hai → allowed
-        if sender_username in [buyer, seller]:
+        # Allowed only if buyer/seller
+        if sender_tag in [buyer, seller] or f"@{message.from_user.username}" in [buyer, seller]:
             await client.send_message(
                 message.chat.id,
-                f"✔ Allowed: {sender_username} used `{lowered}` on deal between {buyer} & {seller}"
+                f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {buyer} & {seller}"
             )
             return
 
-        # Agar admin hai to skip
-        member = await client.get_chat_member(message.chat.id, message.from_user.id)
+        # Agar admin hai to skip ban
+        member = await client.get_chat_member(message.chat.id, user_id)
         if member.status in ["administrator", "creator"]:
             return
 
-        # Warn user: "Tag on deal"
-        await client.send_message(
-            message.chat.id,
-            f"⚠ {sender_username} please tag on deal. Only Buyer ({buyer}) or Seller ({seller}) can request."
-        )
-        return
+        # Ban user
+        try:
+            await client.ban_chat_member(message.chat.id, user_id)
+            await client.send_message(
+                message.chat.id,
+                f"🚫 {sender_tag} tried to interfere with the deal and was banned!"
+            )
+        except Exception as e:
+            await client.send_message(message.chat.id, f"⚠ Error banning user: {e}")
 
 
-print("🤖 Escrow bot with MongoDB Atlas is running…")
+print("🤖 Escrow bot with ban + tagging fixed is running…")
 app.run()
