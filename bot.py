@@ -23,8 +23,8 @@ async def handle_group_messages(client, message):
     text = message.text.strip()
     lowered = text.lower()
     user_id = message.from_user.id
-    sender_tag = f"[{message.from_user.first_name}](tg://user?id={user_id})"
     username = f"@{message.from_user.username}" if message.from_user.username else None
+    sender_tag = f"[{message.from_user.first_name}](tg://user?id={user_id})"
 
     # 1) New DEAL INFO form
     if text.startswith("DEAL INFO"):
@@ -62,35 +62,59 @@ async def handle_group_messages(client, message):
         if not current_deal:
             await client.send_message(
                 message.chat.id,
-                f"⚠ {sender_tag}, no active deal found! Please post your message on the DEAL INFO form."
+                f"⚠ {sender_tag}, please tag on the DEAL INFO form before using `{lowered}`"
             )
             return
 
         buyer = current_deal["buyer"]
         seller = current_deal["seller"]
 
-        # Check if user is admin → skip
+        # Admin exemption
         member = await client.get_chat_member(message.chat.id, user_id)
         if member.status in ["administrator", "creator"]:
             return
 
-        # Check if message contains correct buyer/seller username from the form
-        if (buyer in text or seller in text):
+        # Check if message **mentions/tagged username** from the form
+        tagged_users = []
+        if message.entities:
+            for e in message.entities:
+                if hasattr(e, "user") and e.user:
+                    tagged_users.append(f"@{e.user.username}" if e.user.username else None)
+
+        # Allowed only if tagged username matches buyer/seller
+        is_allowed = False
+        if username in [buyer, seller]:
+            # Buyer/seller khud type kar raha ho → check if tag present
+            if (buyer in text) or (seller in text):
+                is_allowed = True
+        else:
+            # Other users → check if tag matches buyer/seller
+            if any(u in [buyer, seller] for u in tagged_users):
+                is_allowed = True
+
+        if is_allowed:
             await client.send_message(
                 message.chat.id,
                 f"✔ Allowed: {sender_tag} used `{lowered}` on deal between {buyer} & {seller}"
             )
         else:
-            # Ban user if tag missing or wrong
-            try:
-                await client.ban_chat_member(message.chat.id, user_id)
+            # Warn user first if they typed without tagging
+            if username in [buyer, seller]:
                 await client.send_message(
                     message.chat.id,
-                    f"🚫 {sender_tag} tried to interfere with the deal and was banned!"
+                    f"⚠ {sender_tag}, please tag yourself on the DEAL INFO form before using `{lowered}`"
                 )
-            except Exception as e:
-                await client.send_message(message.chat.id, f"⚠ Error banning user: {e}")
+            else:
+                # Ban unknown/interfering user
+                try:
+                    await client.ban_chat_member(message.chat.id, user_id)
+                    await client.send_message(
+                        message.chat.id,
+                        f"🚫 {sender_tag} tried to interfere with the deal and was banned!"
+                    )
+                except Exception as e:
+                    await client.send_message(message.chat.id, f"⚠ Error banning user: {e}")
 
 
-print("🤖 Escrow bot with strict form tagging + auto-ban is running…")
+print("🤖 Escrow bot with strict form tag verification is running…")
 app.run()
